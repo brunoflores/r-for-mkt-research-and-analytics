@@ -1,0 +1,240 @@
+---
+title: "Describing Data"
+author: "Bruno Flores"
+date: "3 de maio de 2015"
+output: html_document
+---
+
+```{r echo=FALSE}
+library('ProjectTemplate')
+load.project()
+```
+
+## Setting the Structure
+
+```{r}
+k.stores <- 20
+k.weeks <- 104 # 2 years of data each
+```
+
+Create a data frame of initially missing values to hold the data:
+```{r}
+store.df <- data.frame(matrix(NA, ncol = 10, nrow = k.stores*k.weeks))
+names(store.df) <- c("storeNum", "Year", "Week", "p1sales", "p2sales", 
+                     "p1price", "p2price", "p1prom", "p2prom", "country")
+```
+
+Store number and country for each observation:
+```{r}
+store.num <- 101:(100+k.stores)
+store.cty <- c(rep("US", 3), rep("DE", 5), rep("GB", 3), rep("BR", 2), 
+               rep("JP", 4), rep("AU", 1), rep("CN", 2))
+```
+
+Replace the appropriate columns in the data frame:
+```{r}
+store.df$storeNum <- rep(store.num, each = k.weeks)
+store.df$country <- rep(store.cty, each = k.weeks)
+rm(store.num, store.cty) # Clean up
+```
+
+The same for Week and Year columns:
+```{r}
+store.df$Week <- rep(1:52, times = k.stores*2)
+store.df$Year <- rep(rep(1:2, each = k.weeks/2), times = k.stores)
+```
+
+Redefine storeNum and country as categorical:
+```{r}
+store.df$storeNum <- factor(store.df$storeNum)
+store.df$country <- factor(store.df$country)
+```
+
+## Simulating Data Points
+
+```{r}
+set.seed(98250)
+```
+
+Arbitrarily assign 10% likelihood of promotion for product 1, and 15% 
+likelihood for product 2 and then randomly determine which weeks have 
+promotions:
+```{r}
+store.df$p1prom <- rbinom(n = nrow(store.df), size = 1, p = 0.1)  # 10% promoted
+store.df$p2prom <- rbinom(n = nrow(store.df), size = 1, p = 0.15) # 15% promoted
+```
+
+Set a price for each product in each row of the data. Suppose that each
+product is sold at one of five distinct price points:
+```{r}
+store.df$p1price <- sample(x = c(2.19, 2.29, 2.49, 2.79, 2.99), 
+                           size = nrow(store.df), replace = TRUE)
+store.df$p2price <- sample(x = c(2.29, 2.49, 2.59, 2.99, 3.19), 
+                           size = nrow(store.df), replace = TRUE)
+```
+
+Item sales are in unit counts. Draw a random Poisson count for each row
+and set the mean sales of Product 1 to be higher than that of Product 2:
+```{r}
+tmp.sales1 <- rpois(nrow(store.df), lambda = 120)
+tmp.sales2 <- rpois(nrow(store.df), lambda = 100)
+```
+
+Scale those counts up or down according to the relative prices.
+Price effects often follow a logarithmic function rather than a linear 
+function:
+```{r}
+tmp.sales1 <- tmp.sales1 * log(store.df$p2price) / log(store.df$p1price)
+tmp.sales2 <- tmp.sales2 * log(store.df$p1price) / log(store.df$p2price)
+# Sales of Product 1 go up to the degree that the log(price) of Product 1 is
+# lower than the log(price) of Product 2.
+```
+
+Sales get a 30% or 40% lift when each product is promoted in store:
+```{r}
+store.df$p1sales <- floor(tmp.sales1 * (1 + store.df$p1prom * 0.3))
+store.df$p2sales <- floor(tmp.sales2 * (1 + store.df$p2prom * 0.4))
+```
+
+## Functions to summarize a variable
+
+### Discrete variables
+
+Frequency counts:
+```{r}
+table(store.df$p1price)
+```
+
+Two-way cross tabs:
+```{r}
+table(store.df$p1price, store.df$p1prom)
+```
+
+Exact fraction of times Product 1 is on promotion at each price point:
+```{r}
+p1.table <- table(store.df$p1price, store.df$p1prom)
+p1.table[,2]/(p1.table[,1]+p1.table[,2])
+```
+
+### Continuous variables
+
+```{r}
+min(store.df$p1sales)
+max(store.df$p2sales)
+mean(store.df$p1prom)
+median(store.df$p2sales) # quantile(store.df$p2sales, probs = c(.25, .5, .75))
+var(store.df$p1sales)
+sd(store.df$p1sales)
+IQR(store.df$p1sales)
+mad(store.df$p1sales)
+quantile(store.df$p1sales, probs = c(.25, .5, .75))
+```
+
+## Summarizing Data Frames
+
+```{r}
+# library(psych)
+describe(store.df[ , c(2, 4:9)])
+# Trimmed mean: the mean after droppping a small proportion of extreme values
+```
+
+## Single Variable Visualization
+
+### Histograms
+
+```{r}
+hist(store.df$p1sales, 
+     main = 'Product 1 Weekly Sales Frequencies, All Stores',
+     xlab = 'Product 1 Sales (Units)',
+     ylab = 'Relative frequency',
+     breaks = 30,
+     col = 'lightblue',
+     freq = FALSE,  # freq = FALSE means plot density, not counts
+     xaxt = 'n')    # xaxt means 'x axis tick marks == no'
+axis(side = 1, at = seq(60, 300, by = 20))
+lines(density(store.df$p1sales, bw = 10), 
+      type = 'l', col = 'darkred', lwd = 2)
+```
+
+### Boxplots
+
+Boxplots are useful to compare distributions by some other factor.
+Response *formula* using *tilde notation*, where the tilde separates the 
+*response variable* from the *explanatory variable*.
+
+```{r}
+boxplot(p2sales ~ storeNum, data = store.df, horizontal = TRUE, 
+        ylab = 'Store', xlab = 'Weekly unit sales', 
+        las = 1, # Text in the horizontal direction
+        main = 'Weekly Sales of P2 by Store')
+```
+
+Powerful tool to vistualize a distribution and make it easy to explore 
+how an outcome variable is related to another factor.
+
+```{r}
+boxplot(p2sales ~ p2prom, data = store.df, horizontal = TRUE, 
+        yaxt = 'n', ylab = 'P2 promoted in store?', xlab = 'Weekly sales',
+        main = 'Weekly sales of P2 with and without promotion')
+axis(side = 2, at = c(1, 2), labels = c('No', 'Yes'))
+```
+
+### QQ Plot to Check Normality
+
+Quantile-quantile plots are a good way to check one's data against a 
+distribution that you think it should come from.
+
+Recommended to test assumptions about your data's distribution.
+
+```{r}
+with(store.df, {
+        qqnorm(p1sales)
+        qqline(p1sales)
+})
+```
+
+The distribution of *log(p1sales)* is more consistent with the normal 
+distribution than the unstransformed variable.
+
+```{r}
+with(store.df, {
+        qqnorm(log(p1sales))
+        qqline(log(p1sales))
+})
+```
+
+### Comulative Distribution
+
+*Empirical cumulative distribution function* is a plott that shows the 
+cumulative proportion of data values in your sample.
+
+This is an easy way to inspect a distribution and to read off percentile 
+values.
+
+Suppose we want to know where we should expect 90% of sales figures to occur:
+
+```{r}
+plot(ecdf(store.df$p1sales),
+     main = "Cumulative distribution of P1 Weekly Sales",
+     ylab = "Cumulative Proportion",
+     xlab = c("P1 weekly sales, all stores", "90% of weeks sold <= 171 units"),
+     yaxt = "n")
+axis(side = 2, at = seq(0, 1, by = 0.1), las = 1, 
+     labels = paste(seq(0, 100, by = 10), "%", sep = ""))
+abline(h = 0.9, lty = 3) # "h=" for horizontal; "lty=3" fot dotted
+abline(v = quantile(store.df$p1sales, pr = 0.9), lty = 3) # "v=" for vertical line
+```
+
+### Maps
+
+```{r}
+p1sales.sum <- aggregate(store.df$p1sales, 
+                         by = list(country = store.df$country), 
+                         sum)
+p1sales.map <- joinCountryData2Map(p1sales.sum, joinCode = "ISO2", 
+                                   nameJoinColumn = "country")
+mapCountryData(p1sales.map, nameColumnToPlot = "x", 
+               mapTitle = "Total P1 sales by Country", 
+               colourPalette = brewer.pal(7, "Greens"),
+               catMethod = "fixedWidth", addLegend = FALSE)
+```

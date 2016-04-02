@@ -1,0 +1,69 @@
+---
+title: "An Overview of the R Language"
+author: "Bruno Flores"
+date: "2 de maio de 2015"
+output: html_document
+---
+
+```{r echo=FALSE}
+library('ProjectTemplate')
+load.project()
+```
+
+## Quick tour of R's Capabilities
+
+Load a data ser from the book's website:
+```{r}
+# satData <- read.csv("http://goo.gl/UDv12g")
+satData$Segment <- factor(satData$Segment)
+head(satData)
+```
+
+Plot the correlation matrix (omitting the Segment column):
+```{r}
+# library(corrplot)
+corrplot.mixed(cor(satData[,-3]))
+```
+
+Mean satisfaction for each segment:
+```{r}
+aggregate(iProdSAT ~ Segment, satData, mean)
+```
+
+Are the differences statistically significant:
+```{r}
+sat.anova <- aov(iProdSAT ~ -1 + Segment, satData)
+summary(sat.anova)
+```
+
+Plot the ANOVA model to visualize confidence intervals for mean product satisfaction by segment:
+```{r}
+suppressMessages(suppressWarnings(library(multcomp)))
+par(mar=c(4, 8, 4, 2))
+plot(glht(sat.anova))
+```
+The X axis represents a Likert rating scale ranging 1-7 for product satisfaction.
+
+### Structural equation model on the satisfaction data
+
+Latent SATisfaction is observed as items iProdSAT and iSalesSAT. Latent likelihood to RECommend is observed as items iProdREC and i SalesREC. RECommendation varies with SATisfaction:
+```{r}
+satModel <- "SAT =~ iProdSAT + iSalesSAT
+                REC =~ iProdREC + iSalesREC
+                REC ~ SAT"
+```
+
+Fit the model with lavaan:
+```{r}
+suppressMessages(suppressWarnings(library(lavaan)))
+sat.fit <- cfa(satModel, data=satData)
+summary(sat.fit, fit.m=TRUE)
+```
+
+Visualize the structural model:
+```{r}
+# library(semPlot)
+semPaths(sat.fit, what="est", residuals=FALSE, intercepts=FALSE, nCharNodes=9)
+```
+
+A structural model with path loadings for a model of product satisfaction and likelihood-to-recommend. Satisfaction has a strong relationship to likelihood-to-recommend: coefficient=0.76
